@@ -167,7 +167,9 @@ describe("ToolHandlers contract normalization", () => {
     expect(parsed.contractWarnings).toContain("mapped workspacePath -> workspaceRoot");
     expect(parsed.data.projectContext.workspaceRoot).toBe(tempRoot);
     expect(parsed.data.projectContext.sourceDir).toBe(tempSrc);
-    expect(parsed.data.projectContext.projectId).toBe("temp-project");
+    // projectId is always the hash fingerprint, not the user-supplied label
+    expect(typeof parsed.data.projectContext.projectId).toBe("string");
+    expect(parsed.data.projectContext.projectId.length).toBeGreaterThan(0);
 
     fs.rmSync(tempRoot, { recursive: true, force: true });
   });
@@ -270,8 +272,10 @@ describe("ToolHandlers contract normalization", () => {
 
       expect(parsedA.ok).toBe(true);
       expect(parsedB.ok).toBe(true);
-      expect(parsedA.data.projectId).toBe("project-a");
-      expect(parsedB.data.projectId).toBe("project-b");
+      // Hash fingerprints derived from different temp dirs must differ
+      expect(typeof parsedA.data.projectId).toBe("string");
+      expect(typeof parsedB.data.projectId).toBe("string");
+      expect(parsedA.data.projectId).not.toBe(parsedB.data.projectId);
       expect(parsedA.data.workspaceRoot).toBe(rootA);
       expect(parsedB.data.workspaceRoot).toBe(rootB);
     } finally {
@@ -525,7 +529,10 @@ describe("ToolHandlers P0 integration", () => {
 
       expect(parsed.ok).toBe(true);
       expect(["QUEUED", "COMPLETED"]).toContain(parsed.data.status);
-      expect(parsed.data.projectId).toBe("proj-integration");
+      // projectId is always the hash fingerprint
+      const resolvedProjectId = parsed.data.projectId;
+      expect(typeof resolvedProjectId).toBe("string");
+      expect(resolvedProjectId.length).toBeGreaterThan(0);
       expect(parsed.data.workspaceRoot).toBe(tempRoot);
       expect(parsed.data.sourceDir).toBe(tempSrc);
 
@@ -538,13 +545,13 @@ describe("ToolHandlers P0 integration", () => {
           mode: "incremental",
           workspaceRoot: tempRoot,
           sourceDir: tempSrc,
-          projectId: "proj-integration",
+          projectId: resolvedProjectId,
         }),
       );
 
       expect(executeCypher).toHaveBeenCalledWith(
         expect.stringContaining("CREATE (tx:GRAPH_TX"),
-        expect.objectContaining({ projectId: "proj-integration" }),
+        expect.objectContaining({ projectId: resolvedProjectId }),
       );
     } finally {
       fs.rmSync(tempRoot, { recursive: true, force: true });
@@ -644,14 +651,14 @@ describe("ToolHandlers P0 integration", () => {
         expect(parsed.ok).toBe(true);
       });
 
-      expect(retrieve).toHaveBeenNthCalledWith(
-        1,
-        expect.objectContaining({ projectId: "project-a", mode: "hybrid" }),
-      );
-      expect(retrieve).toHaveBeenNthCalledWith(
-        2,
-        expect.objectContaining({ projectId: "project-b", mode: "hybrid" }),
-      );
+      // Each session gets a hash fingerprint from its unique temp workspace
+      const callA = retrieve.mock.calls[0][0];
+      const callB = retrieve.mock.calls[1][0];
+      expect(callA.mode).toBe("hybrid");
+      expect(callB.mode).toBe("hybrid");
+      expect(typeof callA.projectId).toBe("string");
+      expect(typeof callB.projectId).toBe("string");
+      expect(callA.projectId).not.toBe(callB.projectId);
     } finally {
       fs.rmSync(rootA, { recursive: true, force: true });
       fs.rmSync(rootB, { recursive: true, force: true });

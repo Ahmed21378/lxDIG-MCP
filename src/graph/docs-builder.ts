@@ -4,10 +4,10 @@
  * @remarks Mirrors graph builder conventions for consistent write behavior.
  */
 
-import * as path from "node:path";
 import type { ParsedDoc, ParsedSection } from "../parsers/docs-parser.js";
 import type { CypherStatement } from "./builder.js";
 import * as env from "../env.js";
+import { computeProjectFingerprint } from "../utils/validation.js";
 
 // ─── Re-export CypherStatement for callers who import only this module ────────
 export type { CypherStatement };
@@ -20,7 +20,9 @@ export class DocsBuilder {
 
   constructor(projectId?: string, workspaceRoot?: string, txId?: string, txTimestamp?: number) {
     this.workspaceRoot = workspaceRoot ?? env.LXDIG_WORKSPACE_ROOT ?? process.cwd();
-    this.projectId = projectId ?? env.LXDIG_PROJECT_ID ?? path.basename(this.workspaceRoot);
+    // Always use the 4-char hash fingerprint as canonical projectId.
+    // Fallback computes it directly from workspaceRoot to guarantee consistency.
+    this.projectId = projectId || computeProjectFingerprint(this.workspaceRoot);
     this.txId = txId ?? env.LXDIG_TX_ID ?? `tx-${Date.now()}`;
     this.txTimestamp = txTimestamp ?? Date.now();
   }

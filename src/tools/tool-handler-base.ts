@@ -34,6 +34,10 @@ import { logger } from "../utils/logger";
 import type { ProjectContext, ToolContext, NormalizedToolArgs } from "./handler.interface";
 import { SessionManager } from "./session-manager";
 import { generateSecureId } from "../utils/validation.js";
+import {
+  toSafeNumber as _toSafeNumber,
+  toEpochMillis as _toEpochMillis,
+} from "../utils/conversions.js";
 
 // ── Collaborators ──────────────────────────────────────────────────────────────
 import { ResponseFormatter } from "./response-formatter";
@@ -580,6 +584,14 @@ export abstract class ToolHandlerBase extends SessionManager {
   // ──────────────────────────────────────────────────────────────────────────────
   // Delegation: TemporalQueryBuilder
   // ──────────────────────────────────────────────────────────────────────────────
+
+  public toSafeNumber(value: unknown): number | null {
+    return _toSafeNumber(value);
+  }
+
+  public toEpochMillis(asOf?: string): number | null {
+    return _toEpochMillis(asOf);
+  }
 
   public applyTemporalFilterToCypher(query: string): string {
     return this.temporalQueryBuilder.applyTemporalFilterToCypher(query);

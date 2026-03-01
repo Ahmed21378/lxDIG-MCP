@@ -38,14 +38,17 @@ export const GRAPH_SOURCE_DIR: string = (() => {
 })();
 
 /**
- * Logical project identifier used as a namespace in the graph.
+ * Human-readable project label derived from env or directory basename.
+ * NOTE: This is NOT the canonical DB key. The canonical projectId is always
+ * the 4-char base-36 hash computed by computeProjectFingerprint().
+ * This value is used as a display label / friendly name only.
  * Env: LXDIG_PROJECT_ID
  * Default: basename of LXDIG_WORKSPACE_ROOT
  */
 export const LXDIG_PROJECT_ID: string =
   process.env.LXDIG_PROJECT_ID || path.basename(LXDIG_WORKSPACE_ROOT);
 
-// Alias for backward compatibility
+/** @deprecated Use LXDIG_PROJECT_ID. This is a human-readable label, not a DB key. */
 export const CODE_GRAPH_PROJECT_ID = LXDIG_PROJECT_ID;
 
 /**

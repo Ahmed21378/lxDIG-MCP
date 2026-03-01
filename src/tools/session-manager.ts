@@ -8,7 +8,6 @@ import { getRequestContext } from "../request-context";
 import type { ProgressEngine } from "../engines/progress-engine";
 import type { TestEngine } from "../engines/test-engine";
 import type ArchitectureEngine from "../engines/architecture-engine";
-import { computeProjectFingerprint } from "../utils/validation";
 import { CANDIDATE_SOURCE_DIRS } from "../utils/source-dirs";
 
 export abstract class SessionManager {
@@ -70,13 +69,15 @@ export abstract class SessionManager {
   protected defaultProjectContext(): ProjectContext {
     const workspaceRoot = env.LXDIG_WORKSPACE_ROOT;
     const sourceDir = env.GRAPH_SOURCE_DIR;
-    const projectId = env.LXDIG_PROJECT_ID;
+    // Always use the 4-char hash fingerprint as canonical projectId.
+    // env.LXDIG_PROJECT_ID is stored as a human-readable label only.
+    const projectId = resolvePersistedProjectId(workspaceRoot, env.LXDIG_PROJECT_ID);
 
     return {
       workspaceRoot,
       sourceDir,
       projectId,
-      projectFingerprint: computeProjectFingerprint(workspaceRoot),
+      projectFingerprint: projectId,
     };
   }
 
@@ -90,9 +91,7 @@ export abstract class SessionManager {
     const workspaceRoot = path.resolve(workspaceInput);
     const sourceInput =
       overrides.sourceDir ||
-      CANDIDATE_SOURCE_DIRS.map((d) => path.join(workspaceRoot, d)).find((p) =>
-        fs.existsSync(p),
-      ) ||
+      CANDIDATE_SOURCE_DIRS.map((d) => path.join(workspaceRoot, d)).find((p) => fs.existsSync(p)) ||
       path.join(workspaceRoot, "src");
     const sourceDir = path.isAbsolute(sourceInput)
       ? sourceInput

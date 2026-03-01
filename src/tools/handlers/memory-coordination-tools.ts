@@ -8,7 +8,7 @@ import * as z from "zod";
 import * as env from "../../env.js";
 import type { EpisodeType } from "../../engines/episode-engine.js";
 import type { ClaimType } from "../../engines/coordination-engine.js";
-import type { HandlerBridge, ToolDefinition , ToolArgs } from "../types.js";
+import type { HandlerBridge, ToolDefinition, ToolArgs } from "../types.js";
 import { logger } from "../../utils/logger.js";
 
 /**
@@ -495,6 +495,7 @@ export const memoryCoordinationToolDefinitions: ToolDefinition[] = [
           {
             claimId: String(claimId),
             released: !feedback.alreadyClosed,
+            notFound: false,
             alreadyClosed: feedback.alreadyClosed,
             outcome: outcome || null,
           },
