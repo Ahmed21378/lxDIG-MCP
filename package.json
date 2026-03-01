@@ -8,7 +8,7 @@
   "main": "dist/server.js",
   "types": "dist/server.d.ts",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && bash scripts/fix-esm-imports.sh",
     "dev": "tsc --watch",
     "start": "node dist/server.js",
     "start:http": "node scripts/start-http-supervisor.mjs",

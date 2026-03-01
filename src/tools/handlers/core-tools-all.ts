@@ -829,9 +829,7 @@ export const coreToolDefinitionsAll: ToolDefinition[] = [
             "No embeddings — run graph_rebuild (full mode) to enable semantic search",
           );
         } else if (embeddingDrift) {
-          recommendations.push(
-            "Embeddings incomplete — run graph_rebuild to regenerate",
-          );
+          recommendations.push("Embeddings incomplete — run graph_rebuild to regenerate");
         }
 
         return ctx.formatSuccess(
@@ -886,7 +884,9 @@ export const coreToolDefinitionsAll: ToolDefinition[] = [
               lastMode: (ctx as any).lastGraphRebuildMode || null,
               latestTxId: (latestTxRow as any).id ?? null,
               latestTxTimestamp:
-                (ctx as any).toSafeNumber((latestTxRow as any).timestamp) ?? (latestTxRow as any).timestamp ?? null,
+                (ctx as any).toSafeNumber((latestTxRow as any).timestamp) ??
+                (latestTxRow as any).timestamp ??
+                null,
               txCount: txCountRow.txCount ?? 0,
               recentErrors: (ctx as any).getRecentBuildErrors(projectId, 3),
             },
@@ -1021,11 +1021,10 @@ export const coreToolDefinitionsAll: ToolDefinition[] = [
       }
 
       try {
+        // Always use the hash-based projectId from the active session context.
+        // User-supplied args.projectId is a label only — never used as a DB key.
         const active = ctx.getActiveProjectContext();
-        const projectId =
-          typeof args?.projectId === "string" && args.projectId.trim().length > 0
-            ? args.projectId
-            : active.projectId;
+        const projectId = active.projectId;
 
         const normalizedTypes = Array.isArray(types)
           ? types

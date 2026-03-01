@@ -158,9 +158,7 @@ export class QdrantClient {
         );
       } else {
         const text = await response.text().catch(() => "(unreadable)");
-        logger.error(
-          `[QdrantClient] deleteByFilter failed (${response.status}): ${text}`,
-        );
+        logger.error(`[QdrantClient] deleteByFilter failed (${response.status}): ${text}`);
       }
     } catch (error) {
       logger.error(`[QdrantClient] deleteByFilter error: ${error}`);
@@ -256,19 +254,16 @@ export class QdrantClient {
     if (!this.connected) return 0;
 
     try {
-      const response = await fetch(
-        `${this.baseUrl}/collections/${collectionName}/points/count`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            filter: {
-              must: [{ key: "projectId", match: { value: projectId } }],
-            },
-            exact: true,
-          }),
-        },
-      );
+      const response = await fetch(`${this.baseUrl}/collections/${collectionName}/points/count`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          filter: {
+            must: [{ key: "projectId", match: { value: projectId } }],
+          },
+          exact: true,
+        }),
+      });
 
       if (response.ok) {
         const data = (await response.json()) as any;

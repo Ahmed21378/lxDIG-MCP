@@ -32,11 +32,34 @@ const BACKOFF_INTERVALS_MS = [100, 400, 1600] as const;
  */
 const CIRCUIT_BREAKER_THRESHOLD = 5;
 
+/**
+ * Elevated circuit-breaker threshold used during bulk write operations (rebuild).
+ * A single slow flush can produce several transient errors without being a real outage.
+ * Sized to support projects up to ~700 files (~40k statements / 1500-stmt chunks ≈ 27 chunks).
+ */
+const CIRCUIT_BREAKER_BULK_THRESHOLD = 50;
+
 /** Milliseconds the circuit stays open before entering half-open state. */
 const CIRCUIT_BREAKER_COOLDOWN_MS = 30_000;
 
 /** Interval for background liveness pings while connected (ms). */
 const HEALTH_CHECK_INTERVAL_MS = 30_000;
+
+/**
+ * Number of statements per chunk in {@link MemgraphClient.executeBatchInChunks}.
+ * Each chunk opens exactly one session and runs inside one explicit transaction,
+ * reducing total session open/close cycles from O(N statements) to O(N/BULK_CHUNK_SIZE).
+ *
+ * 1500 keeps chunk count well under CIRCUIT_BREAKER_BULK_THRESHOLD for projects
+ * up to ~700 files (~40k statements → 27 chunks vs threshold 50).
+ */
+const BULK_CHUNK_SIZE = 1500;
+
+/**
+ * executeBatch delegates to executeBatchInChunks when the payload exceeds this size.
+ * Below the threshold the original sequential loop is used to keep small batches simple.
+ */
+const BULK_THRESHOLD = 50;
 
 /** Sleep helper used for exponential backoff between retries. */
 function sleep(ms: number): Promise<void> {
@@ -66,6 +89,12 @@ export class MemgraphClient {
   private consecutiveFailures = 0;
   private circuitOpen = false;
   private circuitOpenAt = 0;
+
+  /**
+   * When true the circuit-breaker threshold is raised to CIRCUIT_BREAKER_BULK_THRESHOLD.
+   * Set via {@link beginBulkMode} / {@link endBulkMode} around large write operations.
+   */
+  private bulkModeActive = false;
 
   // ── Health check handle ───────────────────────────────────────────────────
 
@@ -175,14 +204,37 @@ export class MemgraphClient {
 
   private recordQueryFailure(): void {
     this.consecutiveFailures += 1;
-    if (this.consecutiveFailures >= CIRCUIT_BREAKER_THRESHOLD) {
+    const threshold = this.bulkModeActive ? CIRCUIT_BREAKER_BULK_THRESHOLD : CIRCUIT_BREAKER_THRESHOLD;
+    if (this.consecutiveFailures >= threshold) {
       this.circuitOpen = true;
       this.circuitOpenAt = Date.now();
       logger.error("[Memgraph] Circuit breaker OPENED — too many consecutive failures", {
-        threshold: CIRCUIT_BREAKER_THRESHOLD,
+        threshold,
+        bulkMode: this.bulkModeActive,
         cooldownMs: CIRCUIT_BREAKER_COOLDOWN_MS,
       });
     }
+  }
+
+  // ── Bulk-mode helpers ─────────────────────────────────────────────────────
+
+  /**
+   * Elevates the circuit-breaker failure threshold for the duration of a bulk
+   * write (e.g. a full graph rebuild). Call {@link endBulkMode} in a finally block.
+   */
+  beginBulkMode(): void {
+    this.bulkModeActive = true;
+    logger.info("[Memgraph] Bulk mode enabled — CB threshold raised to", {
+      threshold: CIRCUIT_BREAKER_BULK_THRESHOLD,
+    });
+  }
+
+  /** Restores the normal circuit-breaker threshold after a bulk write. */
+  endBulkMode(): void {
+    this.bulkModeActive = false;
+    logger.info("[Memgraph] Bulk mode disabled — CB threshold restored", {
+      threshold: CIRCUIT_BREAKER_THRESHOLD,
+    });
   }
 
   // ── Periodic health check ─────────────────────────────────────────────────
@@ -312,19 +364,103 @@ export class MemgraphClient {
     );
   }
 
-  async executeBatch(statements: CypherStatement[]): Promise<QueryResult[]> {
-    const results: QueryResult[] = [];
+  /**
+   * Execute a large batch of Cypher statements efficiently.
+   *
+   * Statements are grouped into chunks of {@link BULK_CHUNK_SIZE}. Each chunk
+   * shares a single driver session and runs inside one explicit transaction,
+   * reducing session-open/close overhead from O(N) to O(N / BULK_CHUNK_SIZE).
+   *
+   * On transaction failure the chunk falls back to individual {@link executeCypher}
+   * calls so partial progress is always preserved.
+   *
+   * @param statements - Cypher statements to execute.
+   * @param chunkSize  - Override chunk size (default: {@link BULK_CHUNK_SIZE}).
+   */
+  async executeBatchInChunks(
+    statements: CypherStatement[],
+    chunkSize = BULK_CHUNK_SIZE,
+  ): Promise<QueryResult[]> {
+    if (statements.length === 0) return [];
 
+    const results: QueryResult[] = new Array(statements.length);
+    let totalFailed = 0;
+
+    for (let offset = 0; offset < statements.length; offset += chunkSize) {
+      const chunk = statements.slice(offset, offset + chunkSize);
+      const session = this.driver.session();
+      let committedOk = false;
+
+      try {
+        const tx = session.beginTransaction();
+        try {
+          for (const { query, params } of chunk) {
+            const sanitized = Object.fromEntries(
+              Object.entries(params ?? {}).map(([k, v]) => [k, v === undefined ? null : v]),
+            );
+            await tx.run(query, sanitized);
+          }
+          await tx.commit();
+          committedOk = true;
+          this.recordQuerySuccess();
+          // All statements in the chunk succeeded — fill with empty-data results.
+          for (let j = 0; j < chunk.length; j++) {
+            results[offset + j] = { data: [] };
+          }
+        } catch (txError) {
+          const msg = txError instanceof Error ? txError.message : String(txError);
+          logger.warn("[Memgraph] Chunk transaction failed, falling back to per-statement execution", {
+            chunkOffset: offset,
+            chunkSize: chunk.length,
+            cause: msg,
+          });
+          await tx.rollback().catch(() => {});
+          this.recordQueryFailure();
+        }
+      } finally {
+        await session.close().catch(() => {});
+      }
+
+      if (!committedOk) {
+        // Fall back: run each statement individually so we preserve as much data as possible.
+        for (let j = 0; j < chunk.length; j++) {
+          const r = await this.executeCypher(chunk[j].query, chunk[j].params);
+          results[offset + j] = r;
+          if (r.error) {
+            totalFailed++;
+            logger.error(`[Memgraph] Fallback statement error: ${r.error}`);
+          }
+        }
+      }
+    }
+
+    if (totalFailed > 0) {
+      logger.warn(`[Memgraph] executeBatchInChunks: ${totalFailed} / ${statements.length} statements failed`);
+    }
+
+    return results;
+  }
+
+  /**
+   * Execute a batch of Cypher statements.
+   *
+   * Automatically delegates to {@link executeBatchInChunks} when the payload
+   * exceeds {@link BULK_THRESHOLD}, cutting session overhead by up to 100×.
+   * Small batches use the original sequential loop to keep things simple.
+   */
+  async executeBatch(statements: CypherStatement[]): Promise<QueryResult[]> {
+    if (statements.length >= BULK_THRESHOLD) {
+      return this.executeBatchInChunks(statements);
+    }
+
+    const results: QueryResult[] = [];
     for (const statement of statements) {
       const result = await this.executeCypher(statement.query, statement.params);
       results.push(result);
-
-      // Log errors but continue
       if (result.error) {
         logger.error(`[Memgraph] Error in query: ${result.error}`);
       }
     }
-
     return results;
   }
 

@@ -7,7 +7,7 @@ import * as fs from "fs";
 import * as z from "zod";
 import * as env from "../../env.js";
 import { generateSecureId } from "../../utils/validation.js";
-import type { HandlerBridge, ToolDefinition , ToolArgs } from "../types.js";
+import type { HandlerBridge, ToolDefinition, ToolArgs } from "../types.js";
 import { logger } from "../../utils/logger.js";
 
 /**
@@ -157,8 +157,7 @@ export const coreGraphToolDefinitions: ToolDefinition[] = [
         const queryMode = mode === "global" || mode === "hybrid" ? mode : "local";
 
         if (language === "cypher") {
-          const cypherQuery =
-            asOfTs !== null ? ctx.applyTemporalFilterToCypher(query) : query;
+          const cypherQuery = asOfTs !== null ? ctx.applyTemporalFilterToCypher(query) : query;
 
           result =
             asOfTs !== null
@@ -730,9 +729,8 @@ export const coreGraphToolDefinitions: ToolDefinition[] = [
         }
         if (embeddingCount === 0) {
           embeddingCount =
-            (ctx.engines.embedding
-              ?.getAllEmbeddings()
-              .filter((e: any) => e.projectId === projectId).length as number) || 0;
+            (ctx.engines.embedding?.getAllEmbeddings().filter((e: any) => e.projectId === projectId)
+              .length as number) || 0;
         }
         const embeddingCoverage =
           memgraphFuncCount + memgraphClassCount + memgraphFileCount > 0
@@ -775,9 +773,7 @@ export const coreGraphToolDefinitions: ToolDefinition[] = [
             "No embeddings — run graph_rebuild (full mode) to enable semantic search",
           );
         } else if (embeddingDrift) {
-          recommendations.push(
-            "Embeddings incomplete — run graph_rebuild to regenerate",
-          );
+          recommendations.push("Embeddings incomplete — run graph_rebuild to regenerate");
         }
 
         return ctx.formatSuccess(
@@ -888,11 +884,10 @@ export const coreGraphToolDefinitions: ToolDefinition[] = [
       }
 
       try {
+        // Always use the hash-based projectId from the active session context.
+        // User-supplied args.projectId is a label only — never used as a DB key.
         const active = ctx.getActiveProjectContext();
-        const projectId =
-          typeof args?.projectId === "string" && args.projectId.trim().length > 0
-            ? args.projectId
-            : active.projectId;
+        const projectId = active.projectId;
 
         const normalizedTypes = Array.isArray(types)
           ? types
@@ -925,7 +920,9 @@ export const coreGraphToolDefinitions: ToolDefinition[] = [
            ORDER BY tx.timestamp ASC`,
           { projectId, sinceTs: anchor.sinceTs },
         );
-        const txIds = (txResult.data || []).map((row: Record<string, unknown>) => String(row.id || "")).filter(Boolean);
+        const txIds = (txResult.data || [])
+          .map((row: Record<string, unknown>) => String(row.id || ""))
+          .filter(Boolean);
 
         const addedResult = await ctx.context.memgraph.executeCypher(
           `MATCH (n)

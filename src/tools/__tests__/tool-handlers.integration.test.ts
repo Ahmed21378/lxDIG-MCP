@@ -547,11 +547,13 @@ describe("SIGNIFICANT: code_clusters returns single cluster", () => {
     // Set workspace so getActiveProjectContext works
     const ws = createTempWorkspace();
     try {
-      await handlers.callTool("graph_set_workspace", {
+      const wsResp = await handlers.callTool("graph_set_workspace", {
         workspaceRoot: ws.root,
         sourceDir: "src",
         projectId: "cluster-proj",
       });
+      // Capture the resolved hash-based projectId from workspace response
+      const resolvedPid = parseResponse(wsResp).data.projectContext.projectId;
 
       // code_clusters uses embeddingEngine.getAllEmbeddings(), not the index
       (handlers as any).embeddingEngine = {
@@ -559,25 +561,25 @@ describe("SIGNIFICANT: code_clusters returns single cluster", () => {
           {
             type: "file",
             name: "a.ts",
-            projectId: "cluster-proj",
+            projectId: resolvedPid,
             metadata: { path: "src/engines/a.ts" },
           },
           {
             type: "file",
             name: "b.ts",
-            projectId: "cluster-proj",
+            projectId: resolvedPid,
             metadata: { path: "src/engines/b.ts" },
           },
           {
             type: "file",
             name: "c.ts",
-            projectId: "cluster-proj",
+            projectId: resolvedPid,
             metadata: { path: "src/tools/c.ts" },
           },
           {
             type: "file",
             name: "d.ts",
-            projectId: "cluster-proj",
+            projectId: resolvedPid,
             metadata: { path: "src/tools/d.ts" },
           },
         ]),
@@ -586,7 +588,7 @@ describe("SIGNIFICANT: code_clusters returns single cluster", () => {
       };
 
       // Mark embeddings as ready so ensureEmbeddings() skips
-      handlers.setProjectEmbeddingsReady("cluster-proj", true);
+      handlers.setProjectEmbeddingsReady(resolvedPid, true);
 
       const response = await handlers.callTool("code_clusters", {
         type: "file",
@@ -902,7 +904,9 @@ describe("Graph tools: graph_rebuild", () => {
 
       expect(parsed.ok).toBe(true);
       expect(["QUEUED", "COMPLETED"]).toContain(parsed.data.status);
-      expect(parsed.data.projectId).toBe("rebuild-test");
+      // projectId is always the hash fingerprint, not the user-supplied label
+      expect(typeof parsed.data.projectId).toBe("string");
+      expect(parsed.data.projectId.length).toBeGreaterThan(0);
       expect(parsed.data).toHaveProperty("txId");
     } finally {
       ws.cleanup();
@@ -924,7 +928,9 @@ describe("Graph tools: graph_set_workspace", () => {
       const parsed = parseResponse(response);
 
       expect(parsed.ok).toBe(true);
-      expect(parsed.data.projectContext.projectId).toBe("ws-test");
+      // projectId is always the hash fingerprint, not the user-supplied label
+      expect(typeof parsed.data.projectContext.projectId).toBe("string");
+      expect(parsed.data.projectContext.projectId.length).toBeGreaterThan(0);
       expect(parsed.data.projectContext.workspaceRoot).toBe(ws.root);
     } finally {
       ws.cleanup();
@@ -1560,7 +1566,9 @@ describe("Setup tools: init_project_setup", () => {
       const parsed = parseResponse(response);
 
       expect(parsed.ok).toBe(true);
-      expect(parsed.data.projectId).toBe("init-test");
+      // projectId is always the hash fingerprint, not the user-supplied label
+      expect(typeof parsed.data.projectId).toBe("string");
+      expect(parsed.data.projectId.length).toBeGreaterThan(0);
       expect(parsed.data.workspaceRoot).toBe(ws.root);
       expect(parsed.data.steps).toBeInstanceOf(Array);
       expect(parsed.data.steps.length).toBeGreaterThanOrEqual(2);
@@ -1784,8 +1792,10 @@ describe("Cross-cutting: session isolation", () => {
       const parsedA = parseResponse(healthA);
       const parsedB = parseResponse(healthB);
 
-      expect(parsedA.data.projectId).toBe("project-a");
-      expect(parsedB.data.projectId).toBe("project-b");
+      // Hash fingerprints derived from different temp dirs must differ
+      expect(typeof parsedA.data.projectId).toBe("string");
+      expect(typeof parsedB.data.projectId).toBe("string");
+      expect(parsedA.data.projectId).not.toBe(parsedB.data.projectId);
     } finally {
       wsA.cleanup();
       wsB.cleanup();

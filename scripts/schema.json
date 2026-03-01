@@ -1,0 +1,822 @@
+{
+  "$schema": "lxDIG Graph Schema v2",
+  "$description": "Two-perspective graph: physical layer (folders/files) for localization, logical layer (classes/functions/variables) for behavior. All intelligence, tests, docs, and rules connect primarily to the logical layer.",
+
+  "designPrinciples": [
+    "Physical layer (FOLDER → FILE) exists only for localization — answering 'where is this?'",
+    "Logical layer (CLASS, FUNCTION, VARIABLE) is the primary connection target for everything else",
+    "A single file may contain the entire logical graph if the project was never refactored",
+    "FILE → symbol edges (CONTAINS) bridge physical to logical — the only required cross-layer link",
+    "Every non-structural relationship should target symbols (CLASS/FUNCTION), not files"
+  ],
+
+  "layers": {
+    "0_structure": {
+      "description": "Physical file system tree — used for localization only",
+      "nodes": ["FOLDER"]
+    },
+    "1_files": {
+      "description": "Source files — bridge between physical and logical layers",
+      "nodes": ["FILE"]
+    },
+    "2_symbols": {
+      "description": "Logical code units — the primary graph. All intelligence connects here.",
+      "nodes": ["FUNCTION", "CLASS", "VARIABLE", "IMPORT", "EXPORT"]
+    },
+    "3_tests": {
+      "description": "Test structure — maps to logical symbols, not files",
+      "nodes": ["TEST_SUITE", "TEST_CASE"]
+    },
+    "4_docs": {
+      "description": "Documentation — describes logical symbols and files",
+      "nodes": ["DOCUMENT", "SECTION"]
+    },
+    "5_intelligence": {
+      "description": "Computed insights — rules, features, tasks, communities all anchor to symbols",
+      "nodes": ["COMMUNITY", "RULE", "FEATURE", "TASK"]
+    },
+    "6_agent_memory": {
+      "description": "Runtime agent state — episodes, learnings, coordination locks",
+      "nodes": ["EPISODE", "LEARNING", "CLAIM", "GRAPH_TX"]
+    }
+  },
+
+  "nodes": {
+    "FOLDER": {
+      "layer": 0,
+      "builtBy": "GraphBuilder",
+      "transactional": true,
+      "properties": {
+        "id":        { "type": "string", "required": true,  "unique": true, "indexed": true, "description": "Scoped folder ID (projectId:folder:path)" },
+        "name":      { "type": "string", "required": false, "description": "Folder basename" },
+        "path":      { "type": "string", "required": false, "description": "Absolute path" },
+        "projectId": { "type": "string", "required": false, "indexed": true, "description": "Multi-tenant scope" }
+      }
+    },
+
+    "FILE": {
+      "layer": 1,
+      "builtBy": "GraphBuilder",
+      "transactional": true,
+      "properties": {
+        "id":                 { "type": "string",   "required": true,  "unique": true, "indexed": true },
+        "name":               { "type": "string",   "required": false },
+        "path":               { "type": "string",   "required": false, "indexed": true, "description": "Absolute path" },
+        "relativePath":       { "type": "string",   "required": false, "indexed": true, "description": "Workspace-relative path" },
+        "language":           { "type": "string",   "required": false },
+        "LOC":                { "type": "integer",  "required": false },
+        "summary":            { "type": "string",   "required": false, "description": "LLM-generated summary (requires summarizer)" },
+        "hash":               { "type": "string",   "required": false, "description": "Content hash for change detection" },
+        "scipId":             { "type": "string",   "required": false },
+        "projectId":          { "type": "string",   "required": false, "indexed": true },
+        "projectFingerprint": { "type": "string",   "required": false },
+        "validFrom":          { "type": "integer",  "required": false },
+        "validTo":            { "type": "integer",  "required": false },
+        "createdAt":          { "type": "integer",  "required": false },
+        "txId":               { "type": "string",   "required": false },
+        "lastModified":       { "type": "datetime", "required": false }
+      }
+    },
+
+    "FUNCTION": {
+      "layer": 2,
+      "builtBy": "GraphBuilder",
+      "transactional": true,
+      "description": "The primary logical unit. Functions, methods, arrow functions, handlers.",
+      "properties": {
+        "id":           { "type": "string",  "required": true,  "unique": true, "indexed": true },
+        "name":         { "type": "string",  "required": false, "indexed": true },
+        "kind":         { "type": "string",  "required": false, "description": "function | method | arrow | generator | constructor" },
+        "filePath":     { "type": "string",  "required": false, "description": "Absolute path of containing file" },
+        "path":         { "type": "string",  "required": false },
+        "relativePath": { "type": "string",  "required": false },
+        "startLine":    { "type": "integer", "required": false },
+        "endLine":      { "type": "integer", "required": false },
+        "LOC":          { "type": "integer", "required": false },
+        "summary":      { "type": "string",  "required": false },
+        "parameters":   { "type": "string",  "required": false, "description": "JSON-serialized parameter list" },
+        "scipId":       { "type": "string",  "required": false },
+        "isExported":   { "type": "boolean", "required": false },
+        "stub":         { "type": "boolean", "required": false, "description": "true for CALLS_TO stubs not yet resolved" },
+        "projectId":    { "type": "string",  "required": false, "indexed": true },
+        "validFrom":    { "type": "integer", "required": false },
+        "validTo":      { "type": "integer", "required": false },
+        "createdAt":    { "type": "integer", "required": false },
+        "txId":         { "type": "string",  "required": false }
+      }
+    },
+
+    "CLASS": {
+      "layer": 2,
+      "builtBy": "GraphBuilder",
+      "transactional": true,
+      "description": "Classes, interfaces, type aliases, enums. Primary container for methods.",
+      "properties": {
+        "id":           { "type": "string",  "required": true,  "unique": true, "indexed": true },
+        "name":         { "type": "string",  "required": false, "indexed": true },
+        "kind":         { "type": "string",  "required": false, "description": "class | interface | enum | type" },
+        "filePath":     { "type": "string",  "required": false },
+        "path":         { "type": "string",  "required": false },
+        "relativePath": { "type": "string",  "required": false },
+        "startLine":    { "type": "integer", "required": false },
+        "endLine":      { "type": "integer", "required": false },
+        "LOC":          { "type": "integer", "required": false },
+        "summary":      { "type": "string",  "required": false },
+        "scipId":       { "type": "string",  "required": false },
+        "isExported":   { "type": "boolean", "required": false },
+        "projectId":    { "type": "string",  "required": false, "indexed": true },
+        "validFrom":    { "type": "integer", "required": false },
+        "validTo":      { "type": "integer", "required": false },
+        "createdAt":    { "type": "integer", "required": false },
+        "txId":         { "type": "string",  "required": false }
+      }
+    },
+
+    "VARIABLE": {
+      "layer": 2,
+      "builtBy": "GraphBuilder",
+      "transactional": true,
+      "properties": {
+        "id":        { "type": "string",  "required": true, "unique": true, "indexed": true },
+        "name":      { "type": "string",  "required": false },
+        "kind":      { "type": "string",  "required": false, "description": "const | let | var" },
+        "startLine": { "type": "integer", "required": false },
+        "type":      { "type": "string",  "required": false, "description": "TypeScript type annotation" },
+        "projectId": { "type": "string",  "required": false, "indexed": true }
+      }
+    },
+
+    "IMPORT": {
+      "layer": 2,
+      "builtBy": "GraphBuilder",
+      "transactional": true,
+      "properties": {
+        "id":         { "type": "string",        "required": true,  "unique": true, "indexed": true },
+        "source":     { "type": "string",        "required": false, "description": "Import specifier (e.g. './utils/helpers')" },
+        "specifiers": { "type": "list<string>",  "required": false },
+        "startLine":  { "type": "integer",       "required": false },
+        "summary":    { "type": "string",        "required": false },
+        "projectId":  { "type": "string",        "required": false, "indexed": true },
+        "validFrom":  { "type": "integer",       "required": false },
+        "validTo":    { "type": "integer",       "required": false },
+        "createdAt":  { "type": "integer",       "required": false },
+        "txId":       { "type": "string",        "required": false }
+      }
+    },
+
+    "EXPORT": {
+      "layer": 2,
+      "builtBy": "GraphBuilder",
+      "transactional": true,
+      "properties": {
+        "id":        { "type": "string",  "required": true,  "unique": true, "indexed": true },
+        "name":      { "type": "string",  "required": false },
+        "isDefault": { "type": "boolean", "required": false },
+        "startLine": { "type": "integer", "required": false },
+        "projectId": { "type": "string",  "required": false, "indexed": true }
+      }
+    },
+
+    "TEST_SUITE": {
+      "layer": 3,
+      "builtBy": "GraphBuilder",
+      "transactional": true,
+      "properties": {
+        "id":        { "type": "string",  "required": true, "unique": true, "indexed": true },
+        "name":      { "type": "string",  "required": false },
+        "type":      { "type": "string",  "required": false, "description": "describe | suite | context" },
+        "category":  { "type": "string",  "required": false, "description": "unit | integration | e2e" },
+        "startLine": { "type": "integer", "required": false },
+        "endLine":   { "type": "integer", "required": false },
+        "filePath":  { "type": "string",  "required": false },
+        "projectId": { "type": "string",  "required": false, "indexed": true }
+      }
+    },
+
+    "TEST_CASE": {
+      "layer": 3,
+      "builtBy": "GraphBuilder",
+      "transactional": true,
+      "properties": {
+        "id":        { "type": "string",  "required": true, "unique": true, "indexed": true },
+        "name":      { "type": "string",  "required": false },
+        "startLine": { "type": "integer", "required": false },
+        "endLine":   { "type": "integer", "required": false },
+        "filePath":  { "type": "string",  "required": false },
+        "projectId": { "type": "string",  "required": false, "indexed": true }
+      }
+    },
+
+    "DOCUMENT": {
+      "layer": 4,
+      "builtBy": "DocsEngine",
+      "transactional": true,
+      "properties": {
+        "id":           { "type": "string",  "required": true, "unique": true, "indexed": true },
+        "relativePath": { "type": "string",  "required": false },
+        "filePath":     { "type": "string",  "required": false },
+        "title":        { "type": "string",  "required": false },
+        "kind":         { "type": "string",  "required": false, "description": "readme | guide | adr | changelog" },
+        "wordCount":    { "type": "integer", "required": false },
+        "hash":         { "type": "string",  "required": false },
+        "projectId":    { "type": "string",  "required": false, "indexed": true },
+        "validFrom":    { "type": "integer", "required": false },
+        "validTo":      { "type": "integer", "required": false },
+        "txId":         { "type": "string",  "required": false }
+      }
+    },
+
+    "SECTION": {
+      "layer": 4,
+      "builtBy": "DocsEngine",
+      "transactional": true,
+      "properties": {
+        "id":           { "type": "string",  "required": true, "unique": true, "indexed": true },
+        "heading":      { "type": "string",  "required": false },
+        "level":        { "type": "integer", "required": false },
+        "content":      { "type": "string",  "required": false, "description": "Trimmed to 4000 chars" },
+        "wordCount":    { "type": "integer", "required": false },
+        "startLine":    { "type": "integer", "required": false },
+        "docId":        { "type": "string",  "required": false },
+        "relativePath": { "type": "string",  "required": false },
+        "projectId":    { "type": "string",  "required": false, "indexed": true },
+        "txId":         { "type": "string",  "required": false }
+      }
+    },
+
+    "COMMUNITY": {
+      "layer": 5,
+      "builtBy": "CommunityDetector (on-demand)",
+      "transactional": false,
+      "properties": {
+        "id":          { "type": "string",  "required": true, "unique": true, "indexed": true },
+        "label":       { "type": "string",  "required": false },
+        "summary":     { "type": "string",  "required": false },
+        "memberCount": { "type": "integer", "required": false },
+        "centralNode": { "type": "string",  "required": false, "description": "ID of the most central member" },
+        "computedAt":  { "type": "integer", "required": false },
+        "projectId":   { "type": "string",  "required": false, "indexed": true }
+      }
+    },
+
+    "RULE": {
+      "layer": 5,
+      "builtBy": "ArchitectureEngine (on-demand)",
+      "transactional": false,
+      "properties": {
+        "id":          { "type": "string", "required": true, "unique": true, "indexed": true },
+        "severity":    { "type": "string", "required": false, "description": "error | warning | info" },
+        "pattern":     { "type": "string", "required": false },
+        "description": { "type": "string", "required": false }
+      }
+    },
+
+    "FEATURE": {
+      "layer": 5,
+      "builtBy": "ProgressEngine (on-demand)",
+      "transactional": false,
+      "properties": {
+        "id":          { "type": "string",  "required": true, "unique": true, "indexed": true },
+        "name":        { "type": "string",  "required": false },
+        "status":      { "type": "string",  "required": false, "description": "planned | in-progress | completed" },
+        "description": { "type": "string",  "required": false },
+        "startedAt":   { "type": "integer", "required": false },
+        "createdAt":   { "type": "integer", "required": false },
+        "projectId":   { "type": "string",  "required": false, "indexed": true }
+      }
+    },
+
+    "TASK": {
+      "layer": 5,
+      "builtBy": "ProgressEngine (on-demand)",
+      "transactional": false,
+      "properties": {
+        "id":          { "type": "string",  "required": true, "unique": true, "indexed": true },
+        "name":        { "type": "string",  "required": false },
+        "status":      { "type": "string",  "required": false, "description": "todo | in-progress | completed | blocked" },
+        "description": { "type": "string",  "required": false },
+        "featureId":   { "type": "string",  "required": false },
+        "assignee":    { "type": "string",  "required": false },
+        "dueDate":     { "type": "string",  "required": false },
+        "createdAt":   { "type": "integer", "required": false },
+        "projectId":   { "type": "string",  "required": false, "indexed": true }
+      }
+    },
+
+    "EPISODE": {
+      "layer": 6,
+      "builtBy": "EpisodeEngine (runtime)",
+      "transactional": false,
+      "properties": {
+        "id":        { "type": "string",  "required": true, "unique": true, "indexed": true },
+        "type":      { "type": "string",  "required": false, "description": "DECISION | LEARNING | OBSERVATION | REFLECTION" },
+        "content":   { "type": "string",  "required": false },
+        "agentId":   { "type": "string",  "required": false, "indexed": true },
+        "sessionId": { "type": "string",  "required": false, "indexed": true },
+        "taskId":    { "type": "string",  "required": false },
+        "timestamp": { "type": "integer", "required": false },
+        "outcome":   { "type": "string",  "required": false, "description": "success | failure | partial" },
+        "projectId": { "type": "string",  "required": false, "indexed": true }
+      }
+    },
+
+    "LEARNING": {
+      "layer": 6,
+      "builtBy": "EpisodeEngine (runtime, via reflect)",
+      "transactional": false,
+      "properties": {
+        "id":           { "type": "string",  "required": true, "unique": true, "indexed": true },
+        "content":      { "type": "string",  "required": false },
+        "extractedAt":  { "type": "integer", "required": false },
+        "confidence":   { "type": "float",   "required": false, "description": "0.0–1.0" },
+        "reflectionId": { "type": "string",  "required": false },
+        "projectId":    { "type": "string",  "required": false, "indexed": true }
+      }
+    },
+
+    "CLAIM": {
+      "layer": 6,
+      "builtBy": "CoordinationEngine (runtime)",
+      "transactional": false,
+      "properties": {
+        "id":        { "type": "string", "required": true, "unique": true, "indexed": true },
+        "agentId":   { "type": "string", "required": false, "indexed": true },
+        "intent":    { "type": "string", "required": false },
+        "status":    { "type": "string", "required": false, "description": "active | released" },
+        "taskId":    { "type": "string", "required": false },
+        "sessionId": { "type": "string", "required": false },
+        "projectId": { "type": "string", "required": false, "indexed": true }
+      }
+    },
+
+    "GRAPH_TX": {
+      "layer": 6,
+      "builtBy": "ToolHandler (runtime, on graph_rebuild)",
+      "transactional": false,
+      "properties": {
+        "id":        { "type": "string",  "required": true, "unique": true, "indexed": true },
+        "type":      { "type": "string",  "required": false, "description": "rebuild | incremental" },
+        "timestamp": { "type": "integer", "required": false },
+        "mode":      { "type": "string",  "required": false, "description": "full | incremental" },
+        "sourceDir": { "type": "string",  "required": false },
+        "projectId": { "type": "string",  "required": false, "indexed": true }
+      }
+    }
+  },
+
+  "relationships": {
+
+    "_comment_physical": "=== PHYSICAL LAYER (localization) ===",
+
+    "FOLDER_CONTAINS_FOLDER": {
+      "type": "CONTAINS",
+      "from": "FOLDER",
+      "to": "FOLDER",
+      "cardinality": "1:N",
+      "description": "Folder hierarchy — parent contains child directories",
+      "properties": {}
+    },
+
+    "FOLDER_CONTAINS_FILE": {
+      "type": "CONTAINS",
+      "from": "FOLDER",
+      "to": "FILE",
+      "cardinality": "1:N",
+      "description": "Folder contains files",
+      "properties": {}
+    },
+
+    "_comment_bridge": "=== BRIDGE: Physical → Logical ===",
+
+    "FILE_CONTAINS_FUNCTION": {
+      "type": "CONTAINS",
+      "from": "FILE",
+      "to": "FUNCTION",
+      "cardinality": "1:N",
+      "description": "File contains function definitions — the primary bridge from physical to logical",
+      "properties": {}
+    },
+
+    "FILE_CONTAINS_CLASS": {
+      "type": "CONTAINS",
+      "from": "FILE",
+      "to": "CLASS",
+      "cardinality": "1:N",
+      "description": "File contains class/interface definitions",
+      "properties": {}
+    },
+
+    "FILE_CONTAINS_VARIABLE": {
+      "type": "CONTAINS",
+      "from": "FILE",
+      "to": "VARIABLE",
+      "cardinality": "1:N",
+      "description": "File contains top-level variable declarations",
+      "properties": {}
+    },
+
+    "FILE_IMPORTS": {
+      "type": "IMPORTS",
+      "from": "FILE",
+      "to": "IMPORT",
+      "cardinality": "1:N",
+      "description": "File has import statements",
+      "properties": {}
+    },
+
+    "FILE_EXPORTS": {
+      "type": "EXPORTS",
+      "from": "FILE",
+      "to": "EXPORT",
+      "cardinality": "1:N",
+      "description": "File has export declarations",
+      "properties": {}
+    },
+
+    "_comment_logical": "=== LOGICAL LAYER (behavior) ===",
+
+    "CALLS_TO": {
+      "type": "CALLS_TO",
+      "from": "FUNCTION",
+      "to": "FUNCTION",
+      "cardinality": "N:N",
+      "description": "Function calls another function — the primary behavioral edge",
+      "properties": {
+        "line": { "type": "integer", "description": "Line number of the call site" }
+      }
+    },
+
+    "EXTENDS": {
+      "type": "EXTENDS",
+      "from": "CLASS",
+      "to": "CLASS",
+      "cardinality": "N:1",
+      "description": "Class inherits from another class",
+      "properties": {}
+    },
+
+    "IMPLEMENTS": {
+      "type": "IMPLEMENTS",
+      "from": "CLASS",
+      "to": "CLASS",
+      "cardinality": "N:N",
+      "description": "Class implements an interface",
+      "properties": {}
+    },
+
+    "IMPORT_REFERENCES_FILE": {
+      "type": "REFERENCES",
+      "from": "IMPORT",
+      "to": "FILE",
+      "cardinality": "N:1",
+      "description": "Import statement resolved to a target file",
+      "properties": {}
+    },
+
+    "FILE_DEPENDS_ON_FILE": {
+      "type": "DEPENDS_ON",
+      "from": "FILE",
+      "to": "FILE",
+      "cardinality": "N:N",
+      "description": "Source file depends on target file (derived from resolved imports)",
+      "properties": {}
+    },
+
+    "_comment_tests": "=== TEST LAYER — connected to logical symbols ===",
+
+    "FILE_CONTAINS_TEST_SUITE": {
+      "type": "CONTAINS",
+      "from": "FILE",
+      "to": "TEST_SUITE",
+      "cardinality": "1:N",
+      "description": "Test file contains test suites",
+      "properties": {}
+    },
+
+    "FILE_CONTAINS_TEST_CASE": {
+      "type": "CONTAINS",
+      "from": "FILE",
+      "to": "TEST_CASE",
+      "cardinality": "1:N",
+      "description": "Test file contains individual test cases",
+      "properties": {}
+    },
+
+    "TEST_SUITE_CONTAINS_TEST_CASE": {
+      "type": "CONTAINS",
+      "from": "TEST_SUITE",
+      "to": "TEST_CASE",
+      "cardinality": "1:N",
+      "description": "Suite groups test cases (describe → it)",
+      "properties": {}
+    },
+
+    "TEST_SUITE_TESTS_FUNCTION": {
+      "type": "TESTS",
+      "from": "TEST_SUITE",
+      "to": "FUNCTION",
+      "cardinality": "N:N",
+      "description": "Test suite covers a function — primary test-to-logic link",
+      "properties": {}
+    },
+
+    "TEST_SUITE_TESTS_CLASS": {
+      "type": "TESTS",
+      "from": "TEST_SUITE",
+      "to": "CLASS",
+      "cardinality": "N:N",
+      "description": "Test suite covers a class",
+      "properties": {}
+    },
+
+    "TEST_CASE_TESTS_FUNCTION": {
+      "type": "TESTS",
+      "from": "TEST_CASE",
+      "to": "FUNCTION",
+      "cardinality": "N:N",
+      "description": "Individual test case verifies a specific function",
+      "properties": {}
+    },
+
+    "TEST_CASE_TESTS_CLASS": {
+      "type": "TESTS",
+      "from": "TEST_CASE",
+      "to": "CLASS",
+      "cardinality": "N:N",
+      "description": "Individual test case verifies a specific class",
+      "properties": {}
+    },
+
+    "TEST_SUITE_TESTS_FILE": {
+      "type": "TESTS",
+      "from": "TEST_SUITE",
+      "to": "FILE",
+      "cardinality": "N:N",
+      "description": "Fallback: test suite covers a file when symbol-level resolution isn't possible",
+      "properties": {}
+    },
+
+    "_comment_docs": "=== DOCS LAYER — describes logical symbols and files ===",
+
+    "SECTION_OF": {
+      "type": "SECTION_OF",
+      "from": "SECTION",
+      "to": "DOCUMENT",
+      "cardinality": "N:1",
+      "description": "Section belongs to a document",
+      "properties": {}
+    },
+
+    "NEXT_SECTION": {
+      "type": "NEXT_SECTION",
+      "from": "SECTION",
+      "to": "SECTION",
+      "cardinality": "1:1",
+      "description": "Reading order within a document",
+      "properties": {}
+    },
+
+    "DOC_DESCRIBES_FILE": {
+      "type": "DOC_DESCRIBES",
+      "from": "SECTION",
+      "to": "FILE",
+      "cardinality": "N:N",
+      "description": "Documentation section describes a file",
+      "properties": {
+        "strength":    { "type": "float",  "description": "Match confidence 0.0–1.0" },
+        "matchedName": { "type": "string", "description": "The backtick reference that matched" }
+      }
+    },
+
+    "DOC_DESCRIBES_FUNCTION": {
+      "type": "DOC_DESCRIBES",
+      "from": "SECTION",
+      "to": "FUNCTION",
+      "cardinality": "N:N",
+      "description": "Documentation section describes a function",
+      "properties": {
+        "strength":    { "type": "float" },
+        "matchedName": { "type": "string" }
+      }
+    },
+
+    "DOC_DESCRIBES_CLASS": {
+      "type": "DOC_DESCRIBES",
+      "from": "SECTION",
+      "to": "CLASS",
+      "cardinality": "N:N",
+      "description": "Documentation section describes a class or interface",
+      "properties": {
+        "strength":    { "type": "float" },
+        "matchedName": { "type": "string" }
+      }
+    },
+
+    "_comment_intelligence": "=== INTELLIGENCE LAYER — anchored to logical symbols ===",
+
+    "BELONGS_TO_COMMUNITY": {
+      "type": "BELONGS_TO",
+      "from": ["FUNCTION", "CLASS", "FILE"],
+      "to": "COMMUNITY",
+      "cardinality": "N:1",
+      "description": "Symbol or file is a member of a detected community",
+      "properties": {}
+    },
+
+    "COMMUNITY_ANCHORED_BY": {
+      "type": "ANCHORED_BY",
+      "from": "COMMUNITY",
+      "to": ["FUNCTION", "CLASS"],
+      "cardinality": "1:1",
+      "description": "The central/most-connected node in the community — the anchor point",
+      "properties": {}
+    },
+
+    "VIOLATES_RULE_FILE": {
+      "type": "VIOLATES_RULE",
+      "from": "FILE",
+      "to": "RULE",
+      "cardinality": "N:N",
+      "description": "File-level architecture violation",
+      "properties": {
+        "severity": { "type": "string" },
+        "message":  { "type": "string" }
+      }
+    },
+
+    "VIOLATES_RULE_CLASS": {
+      "type": "VIOLATES_RULE",
+      "from": "CLASS",
+      "to": "RULE",
+      "cardinality": "N:N",
+      "description": "Class-level architecture violation (e.g. god class, wrong layer)",
+      "properties": {
+        "severity": { "type": "string" },
+        "message":  { "type": "string" }
+      }
+    },
+
+    "VIOLATES_RULE_FUNCTION": {
+      "type": "VIOLATES_RULE",
+      "from": "FUNCTION",
+      "to": "RULE",
+      "cardinality": "N:N",
+      "description": "Function-level violation (e.g. cross-layer call, excessive complexity)",
+      "properties": {
+        "severity": { "type": "string" },
+        "message":  { "type": "string" }
+      }
+    },
+
+    "RULE_DEPENDS_ON_RULE": {
+      "type": "DEPENDS_ON",
+      "from": "RULE",
+      "to": "RULE",
+      "cardinality": "N:N",
+      "description": "Rule dependency — e.g. 'no-cross-layer-import' depends on 'layer-assignment'",
+      "properties": {}
+    },
+
+    "FEATURE_HAS_TASK": {
+      "type": "HAS_TASK",
+      "from": "FEATURE",
+      "to": "TASK",
+      "cardinality": "1:N",
+      "description": "Feature is broken down into tasks",
+      "properties": {}
+    },
+
+    "FEATURE_IMPLEMENTED_BY_FUNCTION": {
+      "type": "IMPLEMENTED_BY",
+      "from": "FEATURE",
+      "to": "FUNCTION",
+      "cardinality": "N:N",
+      "description": "Feature is implemented by these functions — primary traceability link",
+      "properties": {}
+    },
+
+    "FEATURE_IMPLEMENTED_BY_CLASS": {
+      "type": "IMPLEMENTED_BY",
+      "from": "FEATURE",
+      "to": "CLASS",
+      "cardinality": "N:N",
+      "description": "Feature is implemented by these classes",
+      "properties": {}
+    },
+
+    "TASK_IMPLEMENTED_BY_FUNCTION": {
+      "type": "IMPLEMENTED_BY",
+      "from": "TASK",
+      "to": "FUNCTION",
+      "cardinality": "N:N",
+      "description": "Task touches these functions",
+      "properties": {}
+    },
+
+    "TASK_IMPLEMENTED_BY_CLASS": {
+      "type": "IMPLEMENTED_BY",
+      "from": "TASK",
+      "to": "CLASS",
+      "cardinality": "N:N",
+      "description": "Task touches these classes",
+      "properties": {}
+    },
+
+    "_comment_agent": "=== AGENT MEMORY LAYER ===",
+
+    "CLAIM_TARGETS": {
+      "type": "TARGETS",
+      "from": "CLAIM",
+      "to": ["FILE", "FUNCTION", "CLASS"],
+      "cardinality": "1:N",
+      "description": "Agent coordination lock on a file or symbol",
+      "properties": {}
+    },
+
+    "EPISODE_INVOLVES": {
+      "type": "INVOLVES",
+      "from": "EPISODE",
+      "to": ["FILE", "FUNCTION", "CLASS", "VARIABLE"],
+      "cardinality": "N:N",
+      "description": "Episode references these code entities",
+      "properties": {}
+    },
+
+    "NEXT_EPISODE": {
+      "type": "NEXT_EPISODE",
+      "from": "EPISODE",
+      "to": "EPISODE",
+      "cardinality": "1:1",
+      "description": "Temporal chain within an agent session",
+      "properties": {}
+    },
+
+    "LEARNING_APPLIES_TO": {
+      "type": "APPLIES_TO",
+      "from": "LEARNING",
+      "to": ["FILE", "FUNCTION", "CLASS"],
+      "cardinality": "N:N",
+      "description": "Learning is relevant to these code entities",
+      "properties": {}
+    }
+  },
+
+  "relationshipSummary": {
+    "total": 33,
+    "uniqueTypes": 18,
+    "byType": {
+      "CONTAINS":      { "count": 8, "variants": "FOLDER→FOLDER, FOLDER→FILE, FILE→FUNCTION, FILE→CLASS, FILE→VARIABLE, FILE→TEST_SUITE, FILE→TEST_CASE, TEST_SUITE→TEST_CASE" },
+      "IMPORTS":       { "count": 1, "variants": "FILE→IMPORT" },
+      "EXPORTS":       { "count": 1, "variants": "FILE→EXPORT" },
+      "REFERENCES":    { "count": 1, "variants": "IMPORT→FILE" },
+      "DEPENDS_ON":    { "count": 2, "variants": "FILE→FILE, RULE→RULE" },
+      "CALLS_TO":      { "count": 1, "variants": "FUNCTION→FUNCTION" },
+      "EXTENDS":       { "count": 1, "variants": "CLASS→CLASS" },
+      "IMPLEMENTS":    { "count": 1, "variants": "CLASS→CLASS" },
+      "TESTS":         { "count": 5, "variants": "TEST_SUITE→FUNCTION, TEST_SUITE→CLASS, TEST_SUITE→FILE, TEST_CASE→FUNCTION, TEST_CASE→CLASS" },
+      "SECTION_OF":    { "count": 1, "variants": "SECTION→DOCUMENT" },
+      "NEXT_SECTION":  { "count": 1, "variants": "SECTION→SECTION" },
+      "DOC_DESCRIBES": { "count": 3, "variants": "SECTION→FILE, SECTION→FUNCTION, SECTION→CLASS" },
+      "BELONGS_TO":    { "count": 1, "variants": "FUNCTION/CLASS/FILE→COMMUNITY" },
+      "ANCHORED_BY":   { "count": 1, "variants": "COMMUNITY→FUNCTION/CLASS" },
+      "VIOLATES_RULE": { "count": 3, "variants": "FILE→RULE, CLASS→RULE, FUNCTION→RULE" },
+      "HAS_TASK":      { "count": 1, "variants": "FEATURE→TASK" },
+      "IMPLEMENTED_BY":{ "count": 4, "variants": "FEATURE→FUNCTION, FEATURE→CLASS, TASK→FUNCTION, TASK→CLASS" },
+      "TARGETS":       { "count": 1, "variants": "CLAIM→FILE/FUNCTION/CLASS" },
+      "INVOLVES":      { "count": 1, "variants": "EPISODE→FILE/FUNCTION/CLASS/VARIABLE" },
+      "NEXT_EPISODE":  { "count": 1, "variants": "EPISODE→EPISODE" },
+      "APPLIES_TO":    { "count": 1, "variants": "LEARNING→FILE/FUNCTION/CLASS" }
+    }
+  },
+
+  "queryPatterns": {
+    "localization": {
+      "description": "Where is this symbol?",
+      "query": "MATCH (f:FILE)-[:CONTAINS]->(s) WHERE s.name = $name RETURN f.relativePath, s.startLine"
+    },
+    "behavior": {
+      "description": "What does this function call?",
+      "query": "MATCH (fn:FUNCTION {name: $name})-[:CALLS_TO]->(callee) RETURN callee.name, callee.filePath"
+    },
+    "impact": {
+      "description": "What breaks if I change this class?",
+      "query": "MATCH (c:CLASS {name: $name})<-[:TESTS]-(t) RETURN t.name AS affectedTest UNION MATCH (c:CLASS {name: $name})<-[:EXTENDS|IMPLEMENTS]-(sub) RETURN sub.name AS affectedSubclass"
+    },
+    "coverage": {
+      "description": "Which functions have no tests?",
+      "query": "MATCH (fn:FUNCTION) WHERE NOT (fn)<-[:TESTS]-() RETURN fn.name, fn.filePath"
+    },
+    "traceability": {
+      "description": "What code implements this feature?",
+      "query": "MATCH (f:FEATURE {name: $name})-[:IMPLEMENTED_BY]->(s) RETURN labels(s)[0] AS type, s.name, s.filePath"
+    },
+    "violations": {
+      "description": "Which functions violate architecture rules?",
+      "query": "MATCH (fn:FUNCTION)-[:VIOLATES_RULE]->(r:RULE) RETURN fn.name, r.description, r.severity"
+    },
+    "community": {
+      "description": "What is the central symbol of each community?",
+      "query": "MATCH (c:COMMUNITY)-[:ANCHORED_BY]->(s) RETURN c.label, s.name, labels(s)[0]"
+    }
+  }
+}

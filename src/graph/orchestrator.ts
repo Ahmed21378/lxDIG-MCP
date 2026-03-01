@@ -179,17 +179,16 @@ export class GraphOrchestrator {
   async build(options: Partial<BuildOptions> = {}): Promise<BuildResult> {
     const startTime = Date.now();
     const resolvedWorkspaceRoot = options.workspaceRoot || env.LXDIG_WORKSPACE_ROOT;
+    // Always use the 4-char hash fingerprint as canonical projectId.
+    // options.projectId should already be the hash from resolveProjectContext;
+    // fallback computes it directly to guarantee consistency in all code paths.
+    const resolvedProjectId = options.projectId || computeProjectFingerprint(resolvedWorkspaceRoot);
     const opts: BuildOptions = {
       mode: options.mode || "incremental",
       verbose: options.verbose ?? this.verbose,
       workspaceRoot: resolvedWorkspaceRoot,
-      projectId: (
-        options.projectId ||
-        env.LXDIG_PROJECT_ID ||
-        path.basename(resolvedWorkspaceRoot)
-      ).toLowerCase(),
-      projectFingerprint:
-        options.projectFingerprint ?? computeProjectFingerprint(resolvedWorkspaceRoot),
+      projectId: resolvedProjectId,
+      projectFingerprint: resolvedProjectId,
       sourceDir: options.sourceDir || "src",
       exclude: options.exclude || ["node_modules", "dist", ".next", ".lxdig"],
       txId: options.txId,
@@ -356,7 +355,15 @@ export class GraphOrchestrator {
             `[GraphOrchestrator] Executing ${statementsToExecute.length} Cypher statements...`,
           );
         }
-        const results = await this.memgraph.executeBatch(statementsToExecute);
+        // Raise CB threshold and use chunked transactions for the bulk write so that
+        // transient connection-pool pressure does not open the circuit breaker mid-rebuild.
+        this.memgraph.beginBulkMode?.();
+        let results: Array<{ error?: string }>;
+        try {
+          results = await this.memgraph.executeBatch(statementsToExecute);
+        } finally {
+          this.memgraph.endBulkMode?.();
+        }
         const failedStatements = results.filter((r) => r.error).length;
         if (failedStatements > 0) {
           warnings.push(`${failedStatements} Cypher statements failed`);

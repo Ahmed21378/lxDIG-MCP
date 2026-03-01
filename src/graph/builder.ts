@@ -101,11 +101,13 @@ export class GraphBuilder {
     workspaceRoot?: string,
     txId?: string,
     txTimestamp?: number,
-    projectFingerprint?: string,
+    _projectFingerprint?: string,
   ) {
     this.workspaceRoot = workspaceRoot || env.LXDIG_WORKSPACE_ROOT || process.cwd();
-    this.projectId = (projectId || env.LXDIG_PROJECT_ID || path.basename(this.workspaceRoot)).toLowerCase();
-    this.projectFingerprint = projectFingerprint ?? computeProjectFingerprint(this.workspaceRoot);
+    // Always use the 4-char hash fingerprint as canonical projectId.
+    // Fallback computes it directly from workspaceRoot to guarantee consistency.
+    this.projectId = projectId || computeProjectFingerprint(this.workspaceRoot);
+    this.projectFingerprint = this.projectId;
     this.txId = txId || env.LXDIG_TX_ID || `tx-${Date.now()}`;
     this.txTimestamp = txTimestamp || Date.now();
   }
@@ -494,8 +496,13 @@ export class GraphBuilder {
     }
   }
 
-  private createVariableNode(variable: ParsedSymbol & { id?: string; kind?: string }, parsedFile: ParsedFile): void {
-    const nodeId = this.scopedId((variable.id as string | undefined) ?? `var:${parsedFile.relativePath}:${variable.name}`);
+  private createVariableNode(
+    variable: ParsedSymbol & { id?: string; kind?: string },
+    parsedFile: ParsedFile,
+  ): void {
+    const nodeId = this.scopedId(
+      (variable.id as string | undefined) ?? `var:${parsedFile.relativePath}:${variable.name}`,
+    );
     if (this.processedNodes.has(nodeId)) return;
     this.processedNodes.add(nodeId);
 
@@ -533,7 +540,13 @@ export class GraphBuilder {
   }
 
   private createImportNode(
-    imp: { source: string; specifiers?: string[]; summary?: string; id?: string; startLine?: number },
+    imp: {
+      source: string;
+      specifiers?: string[];
+      summary?: string;
+      id?: string;
+      startLine?: number;
+    },
     parsedFile: ParsedFile,
   ): void {
     const nodeId = this.scopedId(imp.id ?? `import:${parsedFile.relativePath}:${imp.source}`);
