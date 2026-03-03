@@ -218,19 +218,19 @@ describe("CoordinationEngine.release", () => {
 
 describe("CoordinationEngine.status", () => {
   it("returns activeClaims and recentEpisodes for an agent", async () => {
+    // Flat row shape matching AGENT_ACTIVE_CLAIMS query:
+    // RETURN c.id AS id, c.agentId AS agentId, ...
     const claimRow = {
-      c: {
-        id: "claim-10",
-        agentId: "agent-a",
-        sessionId: "s",
-        taskId: "task-2",
-        claimType: "task",
-        targetId: "task-2",
-        intent: "do it",
-        validFrom: 100,
-        validTo: null,
-        projectId: "proj",
-      },
+      id: "claim-10",
+      agentId: "agent-a",
+      sessionId: "s",
+      taskId: "task-2",
+      claimType: "task",
+      targetId: "task-2",
+      intent: "do it",
+      validFrom: 100,
+      validTo: null,
+      projectId: "proj",
     };
     const episodeRow = {
       id: "ep-1",
@@ -381,18 +381,18 @@ describe("CoordinationEngine.overview", () => {
   });
 
   it("populates activeClaims from OVERVIEW_ACTIVE rows", async () => {
+    // Flat row shape matching OVERVIEW_ACTIVE query:
+    // RETURN c.id AS id, c.agentId AS agentId, ...
     const activeRow = {
-      c: {
-        id: "claim-active-1",
-        agentId: "agent-a",
-        sessionId: "s",
-        claimType: "file",
-        targetId: "file:src/x.ts",
-        intent: "editing",
-        validFrom: 1000,
-        validTo: null,
-        projectId: "proj",
-      },
+      id: "claim-active-1",
+      agentId: "agent-a",
+      sessionId: "s",
+      claimType: "file",
+      targetId: "file:src/x.ts",
+      intent: "editing",
+      validFrom: 1000,
+      validTo: null,
+      projectId: "proj",
     };
     const memgraph = makeOverviewMemgraph({ active: [activeRow] });
     const engine = new CoordinationEngine(memgraph);
@@ -405,18 +405,17 @@ describe("CoordinationEngine.overview", () => {
   });
 
   it("populates staleClaims independently of activeClaims", async () => {
+    // Flat row shape matching OVERVIEW_STALE query
     const staleRow = {
-      c: {
-        id: "claim-stale-1",
-        agentId: "agent-b",
-        sessionId: "s2",
-        claimType: "task",
-        targetId: "task-old",
-        intent: "stale work",
-        validFrom: 500,
-        validTo: null,
-        projectId: "proj",
-      },
+      id: "claim-stale-1",
+      agentId: "agent-b",
+      sessionId: "s2",
+      claimType: "task",
+      targetId: "task-old",
+      intent: "stale work",
+      validFrom: 500,
+      validTo: null,
+      projectId: "proj",
     };
     const memgraph = makeOverviewMemgraph({ stale: [staleRow] });
     const engine = new CoordinationEngine(memgraph);

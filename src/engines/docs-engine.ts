@@ -113,6 +113,21 @@ export class DocsEngine {
       ? await this.fetchExistingHashes(projectId)
       : new Map<string, string>();
 
+    // ── Phase 1: Parse all docs and collect Cypher statements ──────────────
+    // Collect all statements into a single batch to minimise executeBatch()
+    // calls.  The old per-file approach called executeBatch() N times (once
+    // per markdown file), which rapidly tripped the circuit breaker when any
+    // transient Memgraph errors occurred — see BUG-004.
+    interface DocBatchEntry {
+      filePath: string;
+      doc: ParsedDoc;
+      stmtOffset: number; // index into allStmts where this file's stmts start
+      stmtCount: number; // number of statements for this file
+    }
+
+    const allStmts: Array<{ query: string; params: Record<string, unknown> }> = [];
+    const batchEntries: DocBatchEntry[] = [];
+
     for (const filePath of files) {
       try {
         const doc = this.parser.parseFile(filePath, workspaceRoot);
@@ -123,38 +138,72 @@ export class DocsEngine {
           continue;
         }
 
-        // Write graph nodes
         const stmts = this.buildCypher(doc, projectId, txId);
-        const results = await this.memgraph.executeBatch(stmts);
-        const firstError = results.find((r) => r.error);
-        if (firstError) {
-          result.errors.push({
-            file: filePath,
-            error: `Memgraph error: ${firstError.error}`,
-          });
-          continue;
-        }
-
-        // Phase 3.2: Embed sections into Qdrant
-        if (withEmbeddings && this.qdrant?.isConnected()) {
-          try {
-            await this.embedDoc(doc, projectId);
-            logger.error(`[Phase3.2] Generated embeddings for documentation: ${doc.relativePath}`);
-          } catch (embeddingError) {
-            logger.error(
-              `[Phase3.2] Failed to embed documentation ${doc.relativePath}:`,
-              embeddingError,
-            );
-            // Continue even if embeddings fail
-          }
-        }
-
-        result.indexed++;
+        const offset = allStmts.length;
+        allStmts.push(...stmts);
+        batchEntries.push({
+          filePath,
+          doc,
+          stmtOffset: offset,
+          stmtCount: stmts.length,
+        });
       } catch (err) {
         result.errors.push({
           file: filePath,
           error: err instanceof Error ? err.message : String(err),
         });
+      }
+    }
+
+    // ── Phase 2: Execute all statements in a single batch ──────────────────
+    if (allStmts.length > 0) {
+      const batchResults = await this.memgraph.executeBatch(allStmts);
+
+      // Map batch results back to individual files to report per-file errors.
+      // Guard against the batch returning fewer results than expected (e.g.
+      // the driver aborted early after a fatal error).  Any file whose result
+      // slice is shorter than its statement count is treated as failed.
+      for (const entry of batchEntries) {
+        const fileResults = batchResults.slice(
+          entry.stmtOffset,
+          entry.stmtOffset + entry.stmtCount,
+        );
+
+        if (fileResults.length < entry.stmtCount) {
+          // Batch was truncated — this file's statements were not fully executed
+          result.errors.push({
+            file: entry.filePath,
+            error: "Memgraph error: batch result truncated — statements may not have executed",
+          });
+          continue;
+        }
+
+        const firstError = fileResults.find((r) => r.error);
+        if (firstError) {
+          result.errors.push({
+            file: entry.filePath,
+            error: `Memgraph error: ${firstError.error}`,
+          });
+        } else {
+          result.indexed++;
+        }
+      }
+    }
+
+    // ── Phase 3: Embed sections into Qdrant (per-doc, non-critical) ────────
+    if (withEmbeddings && this.qdrant?.isConnected()) {
+      for (const entry of batchEntries) {
+        // Only embed files that were successfully indexed (no errors)
+        const fileHadError = result.errors.some((e) => e.file === entry.filePath);
+        if (fileHadError) continue;
+
+        try {
+          await this.embedDoc(entry.doc, projectId);
+          logger.info(`[DocsEngine] Generated embeddings for: ${entry.doc.relativePath}`);
+        } catch (embeddingError) {
+          logger.error(`[DocsEngine] Failed to embed ${entry.doc.relativePath}:`, embeddingError);
+          // Continue even if embeddings fail — graph write already succeeded
+        }
       }
     }
 

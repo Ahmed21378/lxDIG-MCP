@@ -19,9 +19,12 @@ export interface runtimeContextResult {
 export interface ProjectContext {
   workspaceRoot: string;
   sourceDir: string;
+  /** Canonical project identifier — always the 4-char base-36 hash */
   projectId: string;
   /** 4-char alphanumeric hash of workspaceRoot — stable workspace identity fingerprint */
   projectFingerprint?: string;
+  /** Human-readable display label (from env, user override, or directory basename) */
+  displayName?: string;
 }
 export interface NormalizedToolArgs {
   normalized: Record<string, unknown>;

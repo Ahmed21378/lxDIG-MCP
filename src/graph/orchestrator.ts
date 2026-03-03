@@ -359,6 +359,10 @@ export class GraphOrchestrator {
         }
         // Raise CB threshold and use chunked transactions for the bulk write so that
         // transient connection-pool pressure does not open the circuit breaker mid-rebuild.
+        // The bulk-mode window now covers the entire write path INCLUDING docs
+        // indexing (Phase 6) — see BUG-004.  Previously endBulkMode() was called
+        // before docs indexing, dropping the threshold back to 5 and causing the
+        // circuit breaker to trip during doc writes.
         this.memgraph.beginBulkMode?.();
         try {
           // Phase 1: All node MERGEs — every statement is independent
@@ -370,6 +374,40 @@ export class GraphOrchestrator {
           if (failedStatements > 0) {
             warnings.push(`${failedStatements} Cypher statements failed`);
           }
+
+          // Phase 6: Index documentation files (inside bulk-mode window)
+          const shouldIndexDocs = (opts.indexDocs ?? true) && opts.mode === "full";
+          if (shouldIndexDocs) {
+            if (opts.verbose) {
+              logger.error("[GraphOrchestrator] Indexing documentation files...");
+            }
+            try {
+              const docsEngine = new DocsEngine(this.memgraph);
+              const docsResult = await docsEngine.indexWorkspace(
+                opts.workspaceRoot,
+                opts.projectId,
+                {
+                  incremental: true,
+                  txId: opts.txId,
+                },
+              );
+              if (opts.verbose) {
+                logger.error(
+                  `[GraphOrchestrator] Docs indexed: ${docsResult.indexed} files, ` +
+                    `${docsResult.skipped} skipped, ${docsResult.errors.length} errors`,
+                );
+              }
+              if (docsResult.errors.length > 0) {
+                for (const e of docsResult.errors) {
+                  warnings.push(`[docs] ${e.file}: ${e.error}`);
+                }
+              }
+            } catch (docsErr) {
+              warnings.push(
+                `[docs] Indexing failed: ${docsErr instanceof Error ? docsErr.message : String(docsErr)}`,
+              );
+            }
+          }
         } finally {
           this.memgraph.endBulkMode?.();
         }
@@ -377,37 +415,6 @@ export class GraphOrchestrator {
         if (opts.verbose) {
           logger.error(
             `[GraphOrchestrator] Memgraph offline - ${totalStatements} statements prepared but not executed`,
-          );
-        }
-      }
-
-      // Index documentation files (Phase 6 — Docs/ADR Indexing)
-      const shouldIndexDocs =
-        (opts.indexDocs ?? true) && opts.mode === "full" && this.memgraph.isConnected();
-      if (shouldIndexDocs) {
-        if (opts.verbose) {
-          logger.error("[GraphOrchestrator] Indexing documentation files...");
-        }
-        try {
-          const docsEngine = new DocsEngine(this.memgraph);
-          const docsResult = await docsEngine.indexWorkspace(opts.workspaceRoot, opts.projectId, {
-            incremental: true,
-            txId: opts.txId,
-          });
-          if (opts.verbose) {
-            logger.error(
-              `[GraphOrchestrator] Docs indexed: ${docsResult.indexed} files, ` +
-                `${docsResult.skipped} skipped, ${docsResult.errors.length} errors`,
-            );
-          }
-          if (docsResult.errors.length > 0) {
-            for (const e of docsResult.errors) {
-              warnings.push(`[docs] ${e.file}: ${e.error}`);
-            }
-          }
-        } catch (docsErr) {
-          warnings.push(
-            `[docs] Indexing failed: ${docsErr instanceof Error ? docsErr.message : String(docsErr)}`,
           );
         }
       }

@@ -67,7 +67,12 @@ export const CoordinationQueries = {
     WHERE c.projectId = $projectId
       AND c.agentId = $agentId
       AND c.validTo IS NULL
-    RETURN c
+    RETURN c.id AS id, c.agentId AS agentId, c.sessionId AS sessionId,
+           c.taskId AS taskId, c.claimType AS claimType, c.targetId AS targetId,
+           c.intent AS intent, c.validFrom AS validFrom,
+           c.targetVersionSHA AS targetVersionSHA, c.validTo AS validTo,
+           c.invalidationReason AS invalidationReason, c.outcome AS outcome,
+           c.projectId AS projectId
     ORDER BY c.validFrom DESC`,
 
   /** Recent episodes for a single agent */
@@ -85,7 +90,12 @@ export const CoordinationQueries = {
     MATCH (c:CLAIM)
     WHERE c.projectId = $projectId
       AND c.validTo IS NULL
-    RETURN c
+    RETURN c.id AS id, c.agentId AS agentId, c.sessionId AS sessionId,
+           c.taskId AS taskId, c.claimType AS claimType, c.targetId AS targetId,
+           c.intent AS intent, c.validFrom AS validFrom,
+           c.targetVersionSHA AS targetVersionSHA, c.validTo AS validTo,
+           c.invalidationReason AS invalidationReason, c.outcome AS outcome,
+           c.projectId AS projectId
     ORDER BY c.validFrom DESC`,
 
   /** Stale claims — target node has been updated since the claim was created */
@@ -95,7 +105,12 @@ export const CoordinationQueries = {
       AND c.validTo IS NULL
       AND t.projectId = $projectId
       AND t.validFrom > c.validFrom
-    RETURN c
+    RETURN c.id AS id, c.agentId AS agentId, c.sessionId AS sessionId,
+           c.taskId AS taskId, c.claimType AS claimType, c.targetId AS targetId,
+           c.intent AS intent, c.validFrom AS validFrom,
+           c.targetVersionSHA AS targetVersionSHA, c.validTo AS validTo,
+           c.invalidationReason AS invalidationReason, c.outcome AS outcome,
+           c.projectId AS projectId
     ORDER BY c.validFrom DESC`,
 
   /** Conflicting claim pairs — two open claims on the same target from different agents */

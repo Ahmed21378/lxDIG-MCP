@@ -3,7 +3,7 @@ import * as env from "../env.js";
 import path from "path";
 import { logger } from "../utils/logger";
 import type { ProjectContext, runtimeContextResult, ToolContext } from "./handler.interface";
-import { resolvePersistedProjectId } from "../utils/project-id";
+import { resolvePersistedProjectId, resolveProjectDisplayName } from "../utils/project-id";
 import { getRequestContext } from "../request-context";
 import type { ProgressEngine } from "../engines/progress-engine";
 import type { TestEngine } from "../engines/test-engine";
@@ -72,12 +72,14 @@ export abstract class SessionManager {
     // Always use the 4-char hash fingerprint as canonical projectId.
     // env.LXDIG_PROJECT_ID is stored as a human-readable label only.
     const projectId = resolvePersistedProjectId(workspaceRoot, env.LXDIG_PROJECT_ID);
+    const displayName = resolveProjectDisplayName(workspaceRoot) || env.LXDIG_PROJECT_ID;
 
     return {
       workspaceRoot,
       sourceDir,
       projectId,
       projectFingerprint: projectId,
+      displayName,
     };
   }
 
@@ -102,12 +104,14 @@ export abstract class SessionManager {
     const friendlyName =
       overrides.projectId || (workspaceProvided ? undefined : env.LXDIG_PROJECT_ID) || undefined;
     const projectId = resolvePersistedProjectId(workspaceRoot, friendlyName);
+    const displayName = resolveProjectDisplayName(workspaceRoot) || friendlyName || env.LXDIG_PROJECT_ID;
 
     return {
       workspaceRoot,
       sourceDir,
       projectId,
       projectFingerprint: projectId, // fingerprint IS the canonical id now
+      displayName,
     };
   }
 

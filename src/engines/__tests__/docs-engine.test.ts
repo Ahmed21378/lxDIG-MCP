@@ -25,7 +25,12 @@ function makeMemgraph(
 ): MemgraphClient {
   return {
     executeCypher: vi.fn().mockResolvedValue(okResult()),
-    executeBatch: vi.fn().mockResolvedValue([okResult()]),
+    // Return one ok result per statement (matching real executeBatch behaviour)
+    executeBatch: vi
+      .fn()
+      .mockImplementation((stmts: Array<{ query: string; params: Record<string, unknown> }>) =>
+        Promise.resolve(stmts.map(() => okResult())),
+      ),
     connect: vi.fn().mockResolvedValue(undefined),
     disconnect: vi.fn().mockResolvedValue(undefined),
     isConnected: vi.fn().mockReturnValue(true),
@@ -106,7 +111,12 @@ describe("DocsEngine.indexWorkspace", () => {
 
   it("records errors per file, continues, does not throw", async () => {
     const mg = makeMemgraph({
-      executeBatch: vi.fn().mockResolvedValue([errResult("bolt error")]),
+      // Return one error result per statement (matching real executeBatch behaviour)
+      executeBatch: vi
+        .fn()
+        .mockImplementation((stmts: Array<{ query: string; params: Record<string, unknown> }>) =>
+          Promise.resolve(stmts.map(() => errResult("bolt error"))),
+        ),
     });
     const engine = new DocsEngine(mg);
     const result = await engine.indexWorkspace(FIXTURES, "proj");

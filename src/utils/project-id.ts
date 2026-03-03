@@ -2,10 +2,14 @@
  * Project ID persistence
  *
  * Resolves a stable project identifier for a workspace and persists it in
- * `.lxdig/project.json`.  When the caller provides an explicit `friendlyName`
- * (i.e. the user-supplied `projectId` from tool arguments), that value is
- * used directly.  Otherwise falls back to a 4-char base-36 hash fingerprint
- * derived from the workspace path.
+ * `.lxdig/project.json`.  The canonical projectId is **always** the 4-char
+ * base-36 hash produced by `computeProjectFingerprint(workspaceRoot)`.
+ *
+ * The optional `friendlyName` parameter is stored as a human-readable label
+ * in the `name` field of the persisted metadata — it is never used as the
+ * canonical DB key.  This prevents the basename-as-projectId problem
+ * (BUG-009) where different machines or renamed directories would produce
+ * different projectIds for the same logical project.
  */
 
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "fs";
@@ -16,9 +20,9 @@ const LXDIG_DIR = ".lxdig";
 const PROJECT_FILE = "project.json";
 
 interface ProjectMeta {
-  /** Canonical project identifier — user-supplied name or hash fallback */
+  /** Canonical project identifier — always the 4-char base-36 hash */
   projectId: string;
-  /** Human-readable label */
+  /** Human-readable display label (from env or directory basename) */
   name: string;
   workspaceRoot: string;
   createdAt: string;
@@ -27,66 +31,59 @@ interface ProjectMeta {
 /**
  * Return the canonical projectId for a workspace.
  *
- * Resolution order:
- *  1. If the caller explicitly provides a `friendlyName`, use it as the
- *     canonical projectId (the common case when a user passes `projectId`
- *     through tool arguments).  The name is persisted so that subsequent
- *     calls without an explicit name can retrieve it.
- *  2. If no name is given, try to read the persisted id from
- *     `.lxdig/project.json`.
- *  3. As a last resort, compute a stable 4-char base-36 hash of the path
- *     and persist it.
+ * The canonical ID is always `computeProjectFingerprint(workspaceRoot)` — a
+ * stable 4-char base-36 hash.  The `friendlyName`, if provided, is stored
+ * as the `name` field in `.lxdig/project.json` for display purposes only.
+ *
+ * If a persisted `project.json` already contains the correct hash, it is
+ * read without rewriting (unless the display name changed).  Stale files
+ * from the old basename-based scheme are automatically migrated.
  *
  * @param workspaceRoot - Absolute path to the project root.
- * @param friendlyName  - Optional explicit projectId supplied by the user.
+ * @param friendlyName  - Optional human-readable label for display purposes.
  */
 export function resolvePersistedProjectId(workspaceRoot: string, friendlyName?: string): string {
   const lxdigDir = path.join(workspaceRoot, LXDIG_DIR);
   const projectFile = path.join(lxdigDir, PROJECT_FILE);
 
-  // ── 1. Explicit name provided → use it and persist ──────────────────────
-  if (friendlyName) {
-    const meta: ProjectMeta = {
-      projectId: friendlyName,
-      name: friendlyName,
-      workspaceRoot,
-      createdAt: new Date().toISOString(),
-    };
+  // The canonical projectId is ALWAYS the 4-char hash fingerprint.
+  const canonicalId = computeProjectFingerprint(workspaceRoot);
 
-    try {
-      mkdirSync(lxdigDir, { recursive: true });
-      writeFileSync(projectFile, JSON.stringify(meta, null, 2) + "\n", "utf-8");
-    } catch {
-      // Non-fatal: project.json creation failed (e.g., read-only FS)
-    }
+  // Determine the human-readable label to store alongside the hash.
+  const displayName =
+    friendlyName ||
+    path.basename(workspaceRoot).toLowerCase().replace(/[^a-z0-9-]/g, "-");
 
-    return friendlyName;
-  }
-
-  // ── 2. No explicit name → try persisted file ───────────────────────────
+  // ── 1. Try reading existing metadata ────────────────────────────────────
+  let existingMeta: ProjectMeta | null = null;
   if (existsSync(projectFile)) {
     try {
-      const meta: ProjectMeta = JSON.parse(readFileSync(projectFile, "utf-8"));
-      if (meta.projectId && typeof meta.projectId === "string") {
-        return meta.projectId;
-      }
+      existingMeta = JSON.parse(readFileSync(projectFile, "utf-8"));
     } catch {
       // Corrupt file — fall through to regenerate
     }
   }
 
-  // ── 3. Generate hash fingerprint as fallback ───────────────────────────
-  const projectId = computeProjectFingerprint(workspaceRoot);
-  const defaultName = path
-    .basename(workspaceRoot)
-    .toLowerCase()
-    .replace(/[^a-z0-9-]/g, "-");
+  // ── 2. If persisted hash is already correct, return it ──────────────────
+  if (existingMeta?.projectId === canonicalId) {
+    // Update the display name if caller provided a new one
+    if (friendlyName && existingMeta.name !== friendlyName) {
+      existingMeta.name = friendlyName;
+      try {
+        writeFileSync(projectFile, JSON.stringify(existingMeta, null, 2) + "\n", "utf-8");
+      } catch {
+        // Non-fatal
+      }
+    }
+    return canonicalId;
+  }
 
+  // ── 3. Persist the canonical hash (new project or migration) ────────────
   const meta: ProjectMeta = {
-    projectId,
-    name: defaultName,
+    projectId: canonicalId,
+    name: displayName,
     workspaceRoot,
-    createdAt: new Date().toISOString(),
+    createdAt: existingMeta?.createdAt || new Date().toISOString(),
   };
 
   try {
@@ -98,5 +95,23 @@ export function resolvePersistedProjectId(workspaceRoot: string, friendlyName?: 
     );
   }
 
-  return projectId;
+  return canonicalId;
+}
+
+/**
+ * Read the persisted human-readable display name for a project.
+ *
+ * Returns `undefined` if no `.lxdig/project.json` exists or the file is corrupt.
+ * This never computes or modifies anything — it is a pure read.
+ *
+ * @param workspaceRoot - Absolute path to the project root.
+ */
+export function resolveProjectDisplayName(workspaceRoot: string): string | undefined {
+  const projectFile = path.join(workspaceRoot, LXDIG_DIR, PROJECT_FILE);
+  try {
+    const meta: ProjectMeta = JSON.parse(readFileSync(projectFile, "utf-8"));
+    return meta.name || undefined;
+  } catch {
+    return undefined;
+  }
 }
