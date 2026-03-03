@@ -11,6 +11,7 @@
  *   EmbeddingManager      — per-project embedding readiness & ensure pipeline
  */
 
+import * as path from "node:path";
 import * as env from "../env";
 import ArchitectureEngine from "../engines/architecture-engine";
 import TestEngine from "../engines/test-engine";
@@ -411,6 +412,19 @@ export abstract class ToolHandlerBase extends SessionManager {
         warnings.push("mapped workspacePath -> workspaceRoot");
       }
       delete normalized.workspacePath;
+    }
+
+    if (toolName === "index_docs") {
+      if (
+        Array.isArray(normalized.paths) &&
+        normalized.paths.length > 0 &&
+        typeof normalized.workspaceRoot !== "string"
+      ) {
+        const firstPath = String(normalized.paths[0]);
+        normalized.workspaceRoot = path.dirname(firstPath);
+        warnings.push("mapped deprecated paths[0] parent directory -> workspaceRoot");
+      }
+      delete normalized.paths;
     }
 
     return { normalized, warnings };

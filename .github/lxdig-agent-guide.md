@@ -5,17 +5,17 @@ Read this file when you need tool details — do not inline it into copilot-inst
 
 ## Tool Decision Guide
 
-| Goal | First choice | Fallback |
-|---|---|---|
-| Count/list nodes | `graph_query` (Cypher) | `graph_health` |
-| Understand a symbol | `code_explain` (symbol name) | `semantic_slice` |
-| Find related code | `find_similar_code` | `semantic_search` |
-| Check arch violations | `arch_validate` | `blocking_issues` |
-| Place new code | `arch_suggest` | — |
-| Docs lookup | `search_docs` → `index_docs` if count=0 | file read |
-| Tests for changed code | `test_select` → `test_run` | `suggest_tests` |
-| Record a design choice | `episode_add` (type: DECISION) | — |
-| Release an agent lock | `agent_release` with `claimId` | — |
+| Goal                   | First choice                            | Fallback          |
+| ---------------------- | --------------------------------------- | ----------------- |
+| Count/list nodes       | `graph_query` (Cypher)                  | `graph_health`    |
+| Understand a symbol    | `code_explain` (symbol name)            | `semantic_slice`  |
+| Find related code      | `find_similar_code`                     | `semantic_search` |
+| Check arch violations  | `arch_validate`                         | `blocking_issues` |
+| Place new code         | `arch_suggest`                          | —                 |
+| Docs lookup            | `search_docs` → `index_docs` if count=0 | file read         |
+| Tests for changed code | `test_select` → `test_run`              | `suggest_tests`   |
+| Record a design choice | `episode_add` (type: DECISION)          | —                 |
+| Release an agent lock  | `agent_release` with `claimId`          | —                 |
 
 ## Correct Tool Signatures
 
@@ -59,22 +59,23 @@ test_run({ "testFiles": ["..."] })
 
 ## Common Pitfalls
 
-| Wrong | Correct |
-|---|---|
-| `code_explain({ elementId: ... })` | `code_explain({ element: "SymbolName" })` |
-| `semantic_diff({ elementA, elementB })` | `semantic_diff({ elementId1, elementId2 })` |
-| `code_clusters({ granularity: "module" })` | `code_clusters({ type: "file" })` |
-| `arch_suggest({ codeName: "X" })` | `arch_suggest({ name: "X" })` |
-| `episode_add({ type: "decision" })` | `episode_add({ type: "DECISION" })` (uppercase) |
-| DECISION without `metadata.rationale` | always include `metadata: { rationale: "..." }` |
-| `decision_query({ topic: "X" })` | `decision_query({ query: "X" })` |
-| `agent_claim({ target: "f.ts" })` | `agent_claim({ targetId: "f.ts" })` |
-| `agent_release({ agentId, taskId })` | `agent_release({ claimId: "claim-xxx" })` |
-| `diff_since({ since: "HEAD~3" })` | `diff_since({ since: "<txId from graph_rebuild>" })` |
+| Wrong                                      | Correct                                              |
+| ------------------------------------------ | ---------------------------------------------------- |
+| `code_explain({ elementId: ... })`         | `code_explain({ element: "SymbolName" })`            |
+| `semantic_diff({ elementA, elementB })`    | `semantic_diff({ elementId1, elementId2 })`          |
+| `code_clusters({ granularity: "module" })` | `code_clusters({ type: "file" })`                    |
+| `arch_suggest({ codeName: "X" })`          | `arch_suggest({ name: "X" })`                        |
+| `episode_add({ type: "decision" })`        | `episode_add({ type: "DECISION" })` (uppercase)      |
+| DECISION without `metadata.rationale`      | always include `metadata: { rationale: "..." }`      |
+| `decision_query({ topic: "X" })`           | `decision_query({ query: "X" })`                     |
+| `agent_claim({ target: "f.ts" })`          | `agent_claim({ targetId: "f.ts" })`                  |
+| `agent_release({ agentId, taskId })`       | `agent_release({ claimId: "claim-xxx" })`            |
+| `diff_since({ since: "HEAD~3" })`          | `diff_since({ since: "<txId from graph_rebuild>" })` |
 
 ## Usage Patterns
 
 ### Explore an unfamiliar codebase
+
 ```
 1. init_project_setup({ projectId, workspaceRoot })
 2. graph_query({ query: "MATCH (n) RETURN labels(n)[0], count(n) ORDER BY count(n) DESC LIMIT 10", language: "cypher" })
@@ -83,6 +84,7 @@ test_run({ "testFiles": ["..."] })
 ```
 
 ### Safe refactor with impact analysis
+
 ```
 1. impact_analyze({ changedFiles: ["src/x.ts"] })
 2. test_select({ changedFiles: ["src/x.ts"] })
@@ -94,6 +96,7 @@ test_run({ "testFiles": ["..."] })
 ```
 
 ### Multi-agent safe edit (claim → change → release)
+
 ```
 1. agent_claim({ agentId: "me", targetId: "src/file.ts", intent: "refactor Y" }) → { claimId }
 2. // make changes
@@ -101,8 +104,9 @@ test_run({ "testFiles": ["..."] })
 ```
 
 ### Docs cold start
+
 ```
 1. search_docs({ query: "topic" })           // if count=0:
-2. index_docs({ paths: ["/abs/README.md"] })
+2. index_docs()                              // indexes workspace markdown
 3. search_docs({ query: "topic" })           // now returns results
 ```

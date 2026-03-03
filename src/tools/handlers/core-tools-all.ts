@@ -2275,7 +2275,7 @@ export const coreToolDefinitionsAll: ToolDefinition[] = [
           "### Docs cold start",
           "```",
           '1. search_docs({ query: "topic" })           — if count=0:',
-          '2. index_docs({ paths: ["/abs/README.md"] })',
+          "2. index_docs()                              // indexes workspace markdown",
           '3. search_docs({ query: "topic" })           — now returns results',
           "```",
         );
